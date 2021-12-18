@@ -1,0 +1,1 @@
+web: gunicorn mainsias_dj.wsgi  

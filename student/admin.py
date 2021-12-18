@@ -1,0 +1,4 @@
+from django.contrib import admin
+from .models import StudentSubscriptionRecord, StudentSubscriptionsQuestionsRecord
+admin.site.register(StudentSubscriptionRecord)
+admin.site.register(StudentSubscriptionsQuestionsRecord)
