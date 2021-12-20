@@ -2,7 +2,7 @@ from decimal import Context
 
 from django.utils.translation import activate
 from mainsias_dj.easy import *
-from .serializers import ExamManagerRelationSerializer, ExamShortSerializer, ExamSerializer, GetExamFullSerializer, GetExamSerializer,\
+from .serializers import ExamManagerRelationSerializer, ExamShortSerializer, ExamSerializer, GetExamFullSerializer, GetExamSerializer,GetListExamSerializer,\
      GetExamListExamManagerRelationSerializer
 from .models import ExamManagerRelation, Exam
 from subscription.models import Subscription
@@ -37,7 +37,7 @@ class DoExamView(APIView):
                     context['exam_list'] = tmp
                 elif isStudent(request.user) or isAdmin(request.user):
                     context['exam_list'] = ExamShortSerializer(Exam.objects.filter(active=True),many=True).data
-                    if request.query_params['assign_to_manager']:
+                    if request.query_params['assign_to_manager'] and isAdmin(request.user):
                         context['exam_list'].append(ExamShortSerializer(Exam.objects.get(short_name="SUBMITFORFREE")).data)
                 return Response(context)
             elif self.kwargs.get('do') == "get-list-all":
@@ -145,3 +145,10 @@ class AllExams(APIView):
         exam_details = GetExamSerializer(exams, many=True).data
         return Response({'result':True,"exams":exam_details})
 
+
+class ListExams(APIView):
+
+    def get(self, request, *args, **kwargs):
+        exams = Exam.objects.filter(active=True).order_by('short_name')
+        exam_shortname = GetListExamSerializer(exams, many=True).data
+        return Response({'result':True,"exams":exam_shortname})

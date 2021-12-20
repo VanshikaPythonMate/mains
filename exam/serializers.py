@@ -25,6 +25,11 @@ class GetExamFullSerializer(serializers.ModelSerializer):
         model = Exam
         fields = '__all__'
 
+class GetListExamSerializer(serializers.ModelSerializer):
+    
+    class Meta:
+        model = Exam
+        fields = ["short_name","image"]
 
 class ExamManagerRelationSerializer(serializers.ModelSerializer):
     class Meta:

@@ -1,7 +1,6 @@
 import os
 from pathlib import Path
 import environ
-import django_heroku
 
 env = environ.Env()
 environ.Env.read_env()
@@ -100,7 +99,6 @@ STATIC_ROOT = os.path.join(BASE_DIR, 'static_files/')
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media_storage/')
 MEDIA_URL = '/media/'
 
-STATIC_ROOT=os.path.join(BASE_DIR, 'static')
 # AWS S3 configuration
 
 AWS_ACCESS_KEY_ID = get_var("AWS_ACCESS_KEY_ID")
@@ -171,6 +169,3 @@ else:
             'PASSWORD': get_var("DATABASE_PASSWORD"),
         }
     }
-
-#Activate Django-Heroku
-django_heroku.settings(locals())

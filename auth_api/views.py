@@ -1,10 +1,11 @@
 from mainsias_dj.easy import *
 from django.shortcuts import redirect
-from auth_api.models import User, VerificationOTP
+from auth_api.models import User, VerificationOTP,unverifiedToken
 from django.contrib.auth.hashers import make_password, check_password
 from auth_api.serializers import UserSerializer, GetUserSerializer
 from rest_framework.authtoken.models import Token
 from student.views import addRegistrationFreeBenifits
+
 
 class Signin(APIView):
 
@@ -12,7 +13,6 @@ class Signin(APIView):
         context = {'result':True}
         try:
             user = User.objects.filter(email=request.data['username'],is_active=True)
-            print(user)
             if not user: return Response({'result':'nouser'})
             else: user=user[0]
             if not check_password(request.data['password'],user.password): return Response({'result':'invalid'})
@@ -22,9 +22,46 @@ class Signin(APIView):
             else:
                 token = Token.objects.create(user=user)
             context['token'] = token.key
+            if not user.isVerified:
+                token.delete()
             context['user'] = GetUserSerializer(token.user).data
         except: context['result'] = 'error'
         return Response(context)
+
+# class Signup(APIView):
+
+#     def post(self, request, *args, **kwargs):
+#         context = {'result':True}
+#         rd = request.data
+        
+#         try:
+#             if User.objects.filter(email=rd['email']).exists():
+#                 if User.objects.get(email=rd['email']).is_active == False :
+#                     user1 = User.objects.filter(email=rd['email'])
+#                     user1.delete() 
+#                     user = User.objects.create(first_name=rd['first_name'].title(),last_name=rd['last_name'].title(),email=rd['email'],\
+#                          password=make_password(rd['password']),isStudent=True, isVerified=False) 
+#                     user.is_active=False 
+#                     user.save() 
+#                     # sendVerificationMail(request.META['HTTP_HOST'],'email_verification',user)
+#                     # token = Token.objects.create(user=user)
+#                     # context['token'] = token.key
+#                     # context['user'] = GetUserSerializer(token.user).data
+#                 else: 
+#                     return Response({'result':"exist"})
+#             else: 
+#                 user = User.objects.create(first_name=rd['first_name'].title(),last_name=rd['last_name'].title(),email=rd['email'],\
+#                      password=make_password(rd['password']),isStudent=True, isVerified=False) 
+#                 user.is_active=False 
+#                 user.save() 
+          
+#             sendVerificationMail(request.META['HTTP_HOST'],'email_verification',user)
+#             token = Token.objects.create(user=user)
+#             context['token'] = token.key
+#             context['user'] = GetUserSerializer(token.user).data
+#         except KeyboardInterrupt:
+#             context['result'] = 'error'
+#         return Response(context)
 
 
 class Signup(APIView):
@@ -36,15 +73,20 @@ class Signup(APIView):
             if User.objects.filter(email=rd['email']): return Response({'result':"exist"})
             user = User.objects.create(first_name=rd['first_name'].title(),last_name=rd['last_name'].title(),email=rd['email'],\
                 password=make_password(rd['password']),isStudent=True, isVerified=False)
-            user.is_active=False
+            user.is_active=False 
             user.save()
             sendVerificationMail(request.META['HTTP_HOST'],'email_verification',user)
             token = Token.objects.create(user=user)
             context['token'] = token.key
+            unverified=unverifiedToken(user=user,unauthtoken=token.key)
+            unverified.save()
+            token.delete()
             context['user'] = GetUserSerializer(token.user).data
         except KeyboardInterrupt:
             context['result'] = 'error'
         return Response(context)
+
+
 
 class Verify(APIView):
 
@@ -55,6 +97,8 @@ class Verify(APIView):
                 if request.data.get('do') == "send-otp":
                     user = User.objects.filter(email=request.data['email'])
                     if not user: return Response({'result':'invalid'})
+                    if isTeacher(user[0]) and 'mains' in request.META["HTTP_HOST"]: return Response({'result':'invalid'})
+                    if not isTeacher(user[0]) and 'eval' in request.META["HTTP_HOST"]: return Response({'result':'invalid'})
                     otp = random.randint(100000,999999)
                     do_resend = VerificationOTP.objects.filter(user=user[0],reason=self.kwargs['type']) 
                     if do_resend:
@@ -63,7 +107,10 @@ class Verify(APIView):
                         do_resend[0].save()
                     else: VerificationOTP(user=user[0],otp=otp,reason=self.kwargs['type'],date_time_expiry=timeAfter(0,0,30)).save()
                     mail_msg = f"Hello {user[0].first_name} {user[0].last_name}\nPlease Verify Your Email by,\nOTP : {otp}\n\n"
-                    send_mail("Forgot Password - MainsIAS", mail_msg,"MainsIAS <accounts@mainsias.com>", [user[0].email],fail_silently=True)
+                    if isTeacher(user[0]):
+                        send_mail("Forgot Password - Evaluators.in", mail_msg,"Admin Evaluators <admin@evaluators.in>", [user[0].email],fail_silently=True, auth_user="evaluators.in@gmail.com", auth_password="afrbvqonukthgmac")
+                    else:
+                        send_mail("Forgot Password - MainsIAS", mail_msg,"MainsIAS <accounts@mainsias.com>", [user[0].email],fail_silently=True)
                     return Response(context)
 
                 elif request.data.get('do') == "update-password":
@@ -75,7 +122,7 @@ class Verify(APIView):
                     return Response(context)
 
             elif self.kwargs['type'] == 'email_verification':
-                user = Token.objects.get(key=request.data['token']).user
+                user=unverifiedToken.objects.get(unauthtoken=request.data['token']).user
                 if request.data.get('do') == "resend":
                     VerificationOTP.objects.filter(user=user, reason=self.kwargs['type']).delete()
                     sendVerificationMail(request.META['HTTP_HOST'],'email_verification',user)
@@ -89,7 +136,11 @@ class Verify(APIView):
                         addRegistrationFreeBenifits(user.id)
                         verfication_obj.delete()
                         user.isVerified = True
-                        user.is_active=True; user.save()
+                        user.is_active=True
+                        user.save()
+                        unverifiedToken.objects.get(unauthtoken=request.data['token']).delete()
+                        token=Token.objects.create(user=user)
+                        context['token']=token.key
                     return Response(context)
         except KeyboardInterrupt:pass
         return Response({'result':False})
@@ -100,10 +151,10 @@ class Verify(APIView):
         try:
             veriObj = VerificationOTP.objects.filter(otp=rg['vk'],reason=self.kwargs['type'])
             if self.kwargs['type'] == 'email_verification':
-                addRegistrationFreeBenifits(User.id)
+                addRegistrationFreeBenifits(veriObj.user.id)
                 veriObj.delete()
                 user = veriObj[0].user; user.isVerified = True; user.save()
-            return redirect('https://mainsias.com')
+            return redirect(f'https://{request.META["HTTP_HOST"]}')
         except :pass
         return Response({'result':False})
 

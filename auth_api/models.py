@@ -83,4 +83,6 @@ class VerificationOTP(models.Model):
     def __str__(self):
         return f"{self.user.email}, {self.otp}, {self.reason}"
 
-    
+class unverifiedToken(models.Model):
+    user=models.ForeignKey(User, on_delete=models.CASCADE)
+    unauthtoken=models.CharField(max_length=256)
